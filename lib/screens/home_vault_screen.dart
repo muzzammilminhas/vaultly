@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 
 import 'capture_screen.dart';
@@ -13,7 +11,7 @@ class HomeVaultScreen extends StatefulWidget {
 
 class _HomeVaultScreenState extends State<HomeVaultScreen> {
   Future<void> _startCapture() async {
-    final result = await Navigator.of(context).push<Uint8List>(
+    final result = await Navigator.of(context).push<CaptureResult>(
       MaterialPageRoute(builder: (_) => const CaptureScreen(), fullscreenDialog: true),
     );
     if (result == null || !mounted) return;
@@ -24,7 +22,27 @@ class _HomeVaultScreenState extends State<HomeVaultScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Flexible(child: InteractiveViewer(child: Image.memory(result))),
+            Flexible(child: InteractiveViewer(child: Image.memory(result.imageBytes))),
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: SingleChildScrollView(
+                  child: Text(
+                    result.extractedText.trim().isEmpty
+                        ? 'No text was found in this image.'
+                        : result.extractedText,
+                    style: TextStyle(
+                      fontStyle: result.extractedText.trim().isEmpty
+                          ? FontStyle.italic
+                          : FontStyle.normal,
+                      color: result.extractedText.trim().isEmpty
+                          ? Theme.of(context).colorScheme.onSurfaceVariant
+                          : null,
+                    ),
+                  ),
+                ),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.all(12),
               child: FilledButton(
