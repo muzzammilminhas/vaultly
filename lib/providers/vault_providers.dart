@@ -35,3 +35,15 @@ class DocumentsNotifier extends AsyncNotifier<List<Document>> {
     state = AsyncData(await DatabaseHelper.instance.getAllDocuments());
   }
 }
+
+/// The raw (undebounced) search box text. The search bar widget debounces
+/// keystrokes before writing here, so every write is a query worth running.
+final searchQueryProvider = StateProvider<String>((ref) => '');
+
+/// Null means "no active search — show the full vault"; an empty list means
+/// "searched, found nothing".
+final searchResultsProvider = FutureProvider.autoDispose<List<Document>?>((ref) async {
+  final query = ref.watch(searchQueryProvider).trim();
+  if (query.isEmpty) return null;
+  return DatabaseHelper.instance.searchDocuments(query);
+});

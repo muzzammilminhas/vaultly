@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 import '../models/document.dart';
 import '../providers/vault_providers.dart';
 import '../widgets/document_tile.dart';
+import '../widgets/search_bar.dart';
 import 'capture_screen.dart';
 
 class HomeVaultScreen extends ConsumerStatefulWidget {
@@ -109,6 +110,7 @@ class _HomeVaultScreenState extends ConsumerState<HomeVaultScreen> {
   @override
   Widget build(BuildContext context) {
     final documentsAsync = ref.watch(documentsProvider);
+    final query = ref.watch(searchQueryProvider).trim();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Vaultly')),
@@ -124,19 +126,37 @@ class _HomeVaultScreenState extends ConsumerState<HomeVaultScreen> {
           if (documents.isEmpty) {
             return _EmptyState(saving: _saving);
           }
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 0.75,
-            ),
-            itemCount: documents.length,
-            itemBuilder: (context, index) {
-              final document = documents[index];
-              return DocumentTile(document: document, onTap: () => _openDocument(document));
-            },
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: VaultSearchBar(
+                  onChanged: (value) => ref.read(searchQueryProvider.notifier).state = value,
+                ),
+              ),
+              Expanded(
+                child: query.isEmpty
+                    ? _DocumentGrid(documents: documents, onTap: _openDocument)
+                    : Consumer(
+                        builder: (context, ref, _) {
+                          final searchAsync = ref.watch(searchResultsProvider);
+                          return searchAsync.when(
+                            loading: () => const Center(child: CircularProgressIndicator()),
+                            error: (error, stack) => Center(child: Text('Search failed: $error')),
+                            data: (results) {
+                              final matches = results ?? const <Document>[];
+                              if (matches.isEmpty) {
+                                return Center(
+                                  child: Text('No documents match "$query"'),
+                                );
+                              }
+                              return _DocumentGrid(documents: matches, onTap: _openDocument);
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
           );
         },
       ),
@@ -151,6 +171,31 @@ class _HomeVaultScreenState extends ConsumerState<HomeVaultScreen> {
             : const Icon(Icons.add_a_photo_outlined),
         label: Text(_saving ? 'Saving…' : 'Scan document'),
       ),
+    );
+  }
+}
+
+class _DocumentGrid extends StatelessWidget {
+  const _DocumentGrid({required this.documents, required this.onTap});
+
+  final List<Document> documents;
+  final ValueChanged<Document> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 0.75,
+      ),
+      itemCount: documents.length,
+      itemBuilder: (context, index) {
+        final document = documents[index];
+        return DocumentTile(document: document, onTap: () => onTap(document));
+      },
     );
   }
 }

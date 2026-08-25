@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -50,6 +51,7 @@ class DatabaseHelper {
     await db.execute('''
       CREATE VIRTUAL TABLE documents_fts USING fts5(
         id UNINDEXED,
+        title,
         body
       )
     ''');
@@ -60,13 +62,45 @@ class DatabaseHelper {
     await db.transaction((txn) async {
       await txn.insert('documents', document.toRow(), conflictAlgorithm: ConflictAlgorithm.replace);
       await txn.delete('documents_fts', where: 'id = ?', whereArgs: [document.id]);
-      await txn.insert('documents_fts', {'id': document.id, 'body': extractedText});
+      await txn.insert('documents_fts', {'id': document.id, 'title': document.title, 'body': extractedText});
     });
   }
 
   Future<void> updateDocumentMeta(Document document) async {
     final db = await database;
     await db.update('documents', document.toRow(), where: 'id = ?', whereArgs: [document.id]);
+    await db.update('documents_fts', {'title': document.title}, where: 'id = ?', whereArgs: [document.id]);
+  }
+
+  /// Ranked full-text search over titles and extracted text. Each query
+  /// token becomes an FTS5 prefix match (`"word"*`), quoted to keep raw user
+  /// input from being interpreted as FTS5 query syntax, so results update
+  /// sensibly as the user is still mid-word. Empty/whitespace-only queries
+  /// return an empty list — callers should show the full vault instead.
+  Future<List<Document>> searchDocuments(String rawQuery) async {
+    final matchQuery = _buildMatchQuery(rawQuery);
+    if (matchQuery.isEmpty) return [];
+    final db = await database;
+    final rows = await db.rawQuery('''
+      SELECT documents.* FROM documents_fts
+      JOIN documents ON documents.id = documents_fts.id
+      WHERE documents_fts MATCH ?
+      ORDER BY bm25(documents_fts)
+    ''', [matchQuery]);
+    return rows.map(Document.fromRow).toList();
+  }
+
+  /// Exposed for testing the FTS5 query-building logic in isolation.
+  @visibleForTesting
+  String buildMatchQuery(String rawQuery) => _buildMatchQuery(rawQuery);
+
+  String _buildMatchQuery(String rawQuery) {
+    final tokens = rawQuery
+        .split(RegExp(r'\s+'))
+        .map((t) => t.replaceAll('"', '').trim())
+        .where((t) => t.isNotEmpty)
+        .map((t) => '"$t"*');
+    return tokens.join(' ');
   }
 
   Future<List<Document>> getAllDocuments() async {
