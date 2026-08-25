@@ -80,9 +80,14 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen> with WidgetsBindi
       if (mounted) setState(() {});
     } catch (e) {
       if (!mounted) return;
+      final isPermissionDenied = e is CameraException &&
+          (e.code == 'CameraAccessDenied' || e.code == 'CameraAccessDeniedWithoutPrompt');
       setState(() {
         _stage = _Stage.error;
-        _errorMessage = 'Camera unavailable — you can still import from the gallery.\n($e)';
+        _errorMessage = isPermissionDenied
+            ? 'Camera access was denied. Enable the camera permission for Vaultly in your '
+                'device settings, or import a document from your gallery instead.'
+            : 'Camera unavailable right now. You can still import a document from your gallery.';
       });
     } finally {
       ref.read(lockSuppressionProvider.notifier).state--;
