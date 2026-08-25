@@ -97,6 +97,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     final bytes = _decryptedBytes;
     if (bytes == null || _sharing) return;
     setState(() => _sharing = true);
+    // The OS share sheet pauses/resumes the app; that isn't the user
+    // backgrounding it, so suppress the lock screen for it.
+    ref.read(lockSuppressionProvider.notifier).state++;
     File? tempFile;
     try {
       final tempDir = await getTemporaryDirectory();
@@ -112,6 +115,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       if (tempFile != null && await tempFile.exists()) {
         await tempFile.delete();
       }
+      ref.read(lockSuppressionProvider.notifier).state--;
       if (mounted) setState(() => _sharing = false);
     }
   }

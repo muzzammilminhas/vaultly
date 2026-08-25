@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'screens/app_lock_gate.dart';
 import 'screens/home_vault_screen.dart';
 
 void main() {
@@ -29,7 +30,7 @@ class VaultlyApp extends StatelessWidget {
         useMaterial3: true,
         appBarTheme: const AppBarTheme(centerTitle: false, elevation: 0),
       ),
-      home: const HomeVaultScreen(),
+      home: const AppLockGate(child: HomeVaultScreen()),
     );
   }
 }

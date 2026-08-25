@@ -4,10 +4,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../db/database_helper.dart';
 import '../models/document.dart';
+import '../services/auth_service.dart';
 import '../services/encryption_service.dart';
 import '../services/ocr_service.dart';
 
 final encryptionServiceProvider = Provider<EncryptionService>((ref) => EncryptionService());
+
+final authServiceProvider = Provider<AuthService>((ref) => AuthService());
+
+/// Reference count of "a system UI the app itself opened — camera
+/// permission dialog, photo picker, share sheet — is temporarily covering
+/// the app" is active. While > 0, the app lock must not re-trigger from the
+/// pause/resume lifecycle events that dialog causes, or every capture or
+/// share would force the user to re-enter their PIN mid-flow.
+final lockSuppressionProvider = StateProvider<int>((ref) => 0);
 
 final ocrServiceProvider = Provider<OcrService>((ref) {
   final service = OcrService();

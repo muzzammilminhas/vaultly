@@ -3,9 +3,11 @@ import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
+import '../providers/vault_providers.dart';
 import '../services/ocr_service.dart';
 import '../widgets/crop_box.dart';
 
@@ -24,14 +26,14 @@ class CaptureResult {
 /// on-device OCR so the extracted text can be visually confirmed against the
 /// image before it's accepted. Pops with a [CaptureResult], or null if
 /// cancelled.
-class CaptureScreen extends StatefulWidget {
+class CaptureScreen extends ConsumerStatefulWidget {
   const CaptureScreen({super.key});
 
   @override
-  State<CaptureScreen> createState() => _CaptureScreenState();
+  ConsumerState<CaptureScreen> createState() => _CaptureScreenState();
 }
 
-class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserver {
+class _CaptureScreenState extends ConsumerState<CaptureScreen> with WidgetsBindingObserver {
   CameraController? _controller;
   Future<void>? _initializeControllerFuture;
   _Stage _stage = _Stage.camera;
@@ -54,6 +56,10 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
   }
 
   Future<void> _setupCamera() async {
+    // Initializing the controller triggers the OS camera-permission dialog
+    // on first use, which pauses/resumes the app — suppress the lock screen
+    // for that, it isn't the user backgrounding the app.
+    ref.read(lockSuppressionProvider.notifier).state++;
     try {
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
@@ -78,6 +84,8 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
         _stage = _Stage.error;
         _errorMessage = 'Camera unavailable — you can still import from the gallery.\n($e)';
       });
+    } finally {
+      ref.read(lockSuppressionProvider.notifier).state--;
     }
   }
 
@@ -115,6 +123,7 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
   }
 
   Future<void> _pickFromGallery() async {
+    ref.read(lockSuppressionProvider.notifier).state++;
     try {
       final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 95);
       if (picked == null) return;
@@ -122,6 +131,8 @@ class _CaptureScreenState extends State<CaptureScreen> with WidgetsBindingObserv
       _loadForReview(bytes);
     } catch (e) {
       _showSnack('Could not open gallery: $e');
+    } finally {
+      ref.read(lockSuppressionProvider.notifier).state--;
     }
   }
 
