@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,7 +11,9 @@ import '../models/document.dart';
 import '../providers/vault_providers.dart';
 import '../widgets/document_tile.dart';
 import '../widgets/search_bar.dart';
+import '../widgets/tag_chip.dart';
 import 'capture_screen.dart';
+import 'document_detail_screen.dart';
 
 class HomeVaultScreen extends ConsumerStatefulWidget {
   const HomeVaultScreen({super.key});
@@ -72,45 +73,23 @@ class _HomeVaultScreenState extends ConsumerState<HomeVaultScreen> {
     return firstLine.length > 60 ? '${firstLine.substring(0, 60)}…' : firstLine;
   }
 
-  Future<void> _openDocument(Document document) async {
-    final encryption = ref.read(encryptionServiceProvider);
-    Uint8List bytes;
-    try {
-      final raw = await File(document.encryptedFilePath).readAsBytes();
-      bytes = await encryption.decryptBytes(raw);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open document: $e')),
-      );
-      return;
-    }
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => Dialog(
-        insetPadding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(child: InteractiveViewer(child: Image.memory(bytes))),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Close'),
-              ),
-            ),
-          ],
-        ),
-      ),
+  void _openDocument(Document document) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => DocumentDetailScreen(document: document)),
     );
+  }
+
+  List<Document> _applyTagFilter(List<Document> documents, String? tag) {
+    if (tag == null) return documents;
+    return documents.where((d) => d.tags.contains(tag)).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final documentsAsync = ref.watch(documentsProvider);
     final query = ref.watch(searchQueryProvider).trim();
+    final selectedTag = ref.watch(selectedTagProvider);
+    final allTags = ref.watch(allTagsProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Vaultly')),
@@ -134,9 +113,32 @@ class _HomeVaultScreenState extends ConsumerState<HomeVaultScreen> {
                   onChanged: (value) => ref.read(searchQueryProvider.notifier).state = value,
                 ),
               ),
+              if (allTags.isNotEmpty)
+                SizedBox(
+                  height: 44,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                    itemCount: allTags.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final tag = allTags[index];
+                      return TagChip(
+                        label: tag,
+                        selected: selectedTag == tag,
+                        onTap: () => ref.read(selectedTagProvider.notifier).state =
+                            selectedTag == tag ? null : tag,
+                      );
+                    },
+                  ),
+                ),
               Expanded(
                 child: query.isEmpty
-                    ? _DocumentGrid(documents: documents, onTap: _openDocument)
+                    ? _DocumentGrid(
+                        documents: _applyTagFilter(documents, selectedTag),
+                        onTap: _openDocument,
+                        emptyMessage: 'No documents tagged "$selectedTag"',
+                      )
                     : Consumer(
                         builder: (context, ref, _) {
                           final searchAsync = ref.watch(searchResultsProvider);
@@ -144,13 +146,15 @@ class _HomeVaultScreenState extends ConsumerState<HomeVaultScreen> {
                             loading: () => const Center(child: CircularProgressIndicator()),
                             error: (error, stack) => Center(child: Text('Search failed: $error')),
                             data: (results) {
-                              final matches = results ?? const <Document>[];
+                              final matches = _applyTagFilter(results ?? const <Document>[], selectedTag);
                               if (matches.isEmpty) {
-                                return Center(
-                                  child: Text('No documents match "$query"'),
-                                );
+                                return Center(child: Text('No documents match "$query"'));
                               }
-                              return _DocumentGrid(documents: matches, onTap: _openDocument);
+                              return _DocumentGrid(
+                                documents: matches,
+                                onTap: _openDocument,
+                                emptyMessage: 'No documents match "$query"',
+                              );
                             },
                           );
                         },
@@ -176,13 +180,17 @@ class _HomeVaultScreenState extends ConsumerState<HomeVaultScreen> {
 }
 
 class _DocumentGrid extends StatelessWidget {
-  const _DocumentGrid({required this.documents, required this.onTap});
+  const _DocumentGrid({required this.documents, required this.onTap, this.emptyMessage});
 
   final List<Document> documents;
   final ValueChanged<Document> onTap;
+  final String? emptyMessage;
 
   @override
   Widget build(BuildContext context) {
+    if (documents.isEmpty) {
+      return Center(child: Text(emptyMessage ?? 'No documents'));
+    }
     return GridView.builder(
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(

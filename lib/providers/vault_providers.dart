@@ -47,3 +47,17 @@ final searchResultsProvider = FutureProvider.autoDispose<List<Document>?>((ref) 
   if (query.isEmpty) return null;
   return DatabaseHelper.instance.searchDocuments(query);
 });
+
+/// The tag currently filtering the vault grid, or null for no filter.
+final selectedTagProvider = StateProvider<String?>((ref) => null);
+
+/// Every distinct tag across the vault, sorted, for the filter chip row.
+final allTagsProvider = Provider<List<String>>((ref) {
+  final documents = ref.watch(documentsProvider).value ?? const <Document>[];
+  final tags = <String>{};
+  for (final document in documents) {
+    tags.addAll(document.tags);
+  }
+  final sorted = tags.toList()..sort();
+  return sorted;
+});
